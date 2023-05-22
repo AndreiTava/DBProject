@@ -1,25 +1,8 @@
---Ex.6..9 +13
-CREATE OR REPLACE PACKAGE misc AS
-    BAD_DISCOUNT EXCEPTION;
-    INVALID_THRESHOLD EXCEPTION;
-    INVALID_DATE EXCEPTION;
-    
-    FUNCTION average_diff(p_platform_name IN platforms.platform_name%TYPE) RETURN NUMBER;
-    PROCEDURE discount_all_independent(p_discount IN products.base_price%TYPE);
-    FUNCTION review_count(p_product IN products.product_title%TYPE,
-                                        p_threshold IN reviews.rating%TYPE,
-                                        p_date_since IN reviews.review_date%TYPE)
-                                        RETURN NUMBER;
-    PROCEDURE delete_uncommon_friends(p_user IN accounts.display_name%TYPE);
-END misc;
-/
-
-CREATE OR REPLACE PACKAGE BODY misc AS
-    
+--Ex.6
 --Pentru o platforma dată, să se returneze diferența medie dintre prețul fiecărui produs 
 --și prețul celui mai scump produs din franciza respectivă.
 --(dacă nu face parte din vreo franciza, se considera pretul maxim 0.)
-    FUNCTION average_diff(p_platform_name IN platforms.platform_name%TYPE) RETURN NUMBER IS
+CREATE OR REPLACE FUNCTION average_diff(p_platform_name IN platforms.platform_name%TYPE) RETURN NUMBER IS
         TYPE fran_prod_map IS TABLE OF products.base_price%TYPE INDEX BY PLS_INTEGER;
         TYPE prod_rec IS RECORD 
             (prod_id products.product_id%TYPE, 
@@ -62,10 +45,19 @@ CREATE OR REPLACE PACKAGE BODY misc AS
                                 RAISE NO_DATA_FOUND;
         WHEN VALUE_ERROR THEN DBMS_OUTPUT.PUT_LINE('THERE ARE NO PRODUCTS FOR PLATFORM ' || p_platform_name);
     END average_diff;
-    
+/
+
+BEGIN
+    DBMS_OUTPUT.PUT_LINE(average_diff('Personal Computer'));
+    --DBMS_OUTPUT.PUT_LINE(average_diff('PlayStation 2'));
+    --DBMS_OUTPUT.PUT_LINE(average_diff('Nintendo Gamecube'));
+END;
+/
+
+--Ex.7
 --Să se reducă cu un procent dat prețul tuturor produselor dezvoltate de către studiouri independente
 --(care nu au alt studio parinte).
-    PROCEDURE discount_all_independent(p_discount IN products.base_price%TYPE) IS
+CREATE OR REPLACE PROCEDURE discount_all_independent(p_discount IN products.base_price%TYPE) IS
         CURSOR products_by(studio_id studios.studio_id%TYPE) IS --parameter cursor
             SELECT product_id
             FROM products
@@ -84,15 +76,31 @@ CREATE OR REPLACE PACKAGE BODY misc AS
                 WHERE CURRENT OF products_by;
             END LOOP;
         END LOOP;
-        COMMIT;
     EXCEPTION
         WHEN BAD_DISCOUNT THEN DBMS_OUTPUT.PUT_LINE('INVALID DISCOUNT VALUE');
     END discount_all_independent;
+/
 
+
+
+BEGIN
+    discount_all_independent(0.1);
+END;
+/
+SELECT * FROM products;
+
+ROLLBACK;
+
+BEGIN
+    discount_all_independent(6);
+END;
+/
+
+--Ex.8
 --Să se returneze numărul de recenzii cu scor mai mare sau egal cu o valoare data,
 --pentru un anumit produs, făcute după o anumită dată 
 --doar de către utilizatorii care dețin produsul.
-    FUNCTION review_count(p_product IN products.product_title%TYPE,
+CREATE OR REPLACE FUNCTION review_count(p_product IN products.product_title%TYPE,
                                         p_threshold IN reviews.rating%TYPE,
                                         p_date_since IN reviews.review_date%TYPE)
                                         RETURN NUMBER IS
@@ -128,10 +136,20 @@ CREATE OR REPLACE PACKAGE BODY misc AS
         WHEN INVALID_THRESHOLD THEN DBMS_OUTPUT.PUT_LINE('INVALID THRESHOLD! SHOULD BE BETWEEN 0 and 5!');
         WHEN INVALID_DATE THEN DBMS_OUTPUT.PUT_LINE('INVALID DATE! SHOULD BE BETWEEN PRODUCT DATE AND PRESENT');
     END review_count;
+/
 
+BEGIN
+    DBMS_OUTPUT.PUT_LINE(review_count('Minecraft',4,TO_DATE('10-JUL-18','DD-MON-YY')));
+    --DBMS_OUTPUT.PUT_LINE(review_count('Terraria',4,TO_DATE('10-JUL-18','DD-MON-YY')));
+    --DBMS_OUTPUT.PUT_LINE(review_count('Minecraft',7,TO_DATE('10-JUL-18','DD-MON-YY')));
+    --DBMS_OUTPUT.PUT_LINE(review_count('Minecraft',4,TO_DATE('10-JUL-04','DD-MON-YY')));
+END;
+/
+
+--Ex.9
 --Pentru un utilizator dat(display name), sa se șteargă toate prieteniile 
 --cu utilizatori care nu au niciun produs în comun pe o platforma comună.
-    PROCEDURE delete_uncommon_friends(p_user IN accounts.display_name%TYPE) IS
+CREATE OR REPLACE PROCEDURE delete_uncommon_friends(p_user IN accounts.display_name%TYPE) IS
         --procedure could be simplified by declaring this collection at schema level
         --thus enabling me to use it in SQL expressions... I chose not to do that however
         TYPE account_table IS TABLE OF accounts.account_id%TYPE;
@@ -194,10 +212,28 @@ CREATE OR REPLACE PACKAGE BODY misc AS
                                 RAISE NO_DATA_FOUND;
         WHEN TOO_MANY_ROWS THEN DBMS_OUTPUT.PUT_LINE('MORE THAN ONE USER WITH DISPLAY NAME ' || p_user);
                                 RAISE TOO_MANY_ROWS;
-    END delete_uncommon_friends;    
-
-END misc;
+    END delete_uncommon_friends;
 /
+
+
+BEGIN
+    delete_uncommon_friends('Decebal Popescu');
+END;
+/
+SELECT * FROM friendships;
+
+ROLLBACK;
+
+BEGIN
+    delete_uncommon_friends('widz');
+END;
+/
+
+BEGIN
+    delete_uncommon_friends('the quick brown fox');
+END;
+/
+
 --Ex.10
 --Dacă un sezon de reducere este în desfășurare, 
 --nu este permisă inserarea altuia nou.
@@ -219,6 +255,16 @@ CREATE OR REPLACE TRIGGER sale_protection
           WHEN NO_DATA_FOUND THEN NULL;
 END;
 /
+
+SELECT * FROM sales;
+
+INSERT INTO sales VALUES (TO_DATE('05 JAN 2023', 'DD MON YYYY'), TO_DATE('07 JAN 2023', 'DD MON YYYY'), 'Sneaky Sale');
+
+UPDATE sales 
+SET end_date = TO_DATE('04 JAN 2023', 'DD MON YYYY')
+WHERE sale_name = 'The Sale To End All Sales';
+
+ROLLBACK;
 
 --Ex.11
 --Când se modifică prețul unui produs, să se insereze automat vechiul preț în price_history.
@@ -248,10 +294,203 @@ CREATE OR REPLACE TRIGGER name_validation
     END IF;
 END;
 /
-CREATE PROCEDURE sql_proc IS
+
+CREATE OR REPLACE PROCEDURE sql_proc IS
 BEGIN
     NULL;
-END sql_proc;
+END;
+/
+
+--Ex.13
+CREATE OR REPLACE PACKAGE misc AS
+    BAD_DISCOUNT EXCEPTION;
+    INVALID_THRESHOLD EXCEPTION;
+    INVALID_DATE EXCEPTION;
+    
+    FUNCTION m_average_diff(p_platform_name IN platforms.platform_name%TYPE) RETURN NUMBER;
+    PROCEDURE m_discount_all_independent(p_discount IN products.base_price%TYPE);
+    FUNCTION m_review_count(p_product IN products.product_title%TYPE,
+                                        p_threshold IN reviews.rating%TYPE,
+                                        p_date_since IN reviews.review_date%TYPE)
+                                        RETURN NUMBER;
+    PROCEDURE m_delete_uncommon_friends(p_user IN accounts.display_name%TYPE);
+END misc;
+/
+
+CREATE OR REPLACE PACKAGE BODY misc AS
+    
+    FUNCTION m_average_diff(p_platform_name IN platforms.platform_name%TYPE) RETURN NUMBER IS
+        TYPE fran_prod_map IS TABLE OF products.base_price%TYPE INDEX BY PLS_INTEGER;
+        TYPE prod_rec IS RECORD 
+            (prod_id products.product_id%TYPE, 
+            fran_id products.franchise_id%TYPE, 
+            price products.base_price%TYPE);
+        TYPE prod_tab IS TABLE OF prod_rec;
+        v_products prod_tab := prod_tab();
+        v_max_prod fran_prod_map;
+        v_average NUMBER := 0;
+        v_plat_id platforms.platform_id%TYPE;
+    BEGIN
+        SELECT platform_id
+        INTO v_plat_id
+        FROM platforms
+        WHERE platform_name = p_platform_name;
+                    
+        SELECT product_id,franchise_id,base_price
+        BULK COLLECT INTO v_products
+        FROM product_availability JOIN products USING (product_id) 
+        WHERE platform_id = v_plat_id;
+            
+        FOR i IN v_products.FIRST..v_products.LAST LOOP --we know for sure it's dense
+           IF v_products(i).fran_id IS NULL 
+                THEN  v_average := v_average + v_products(i).price;
+                    CONTINUE;
+            END IF;
+                    
+            IF NOT v_max_prod.EXISTS(v_products(i).fran_id) --if we've already computed the maximum for this franchise
+                THEN SELECT MAX(base_price)
+                     INTO v_max_prod(v_products(i).fran_id)
+                     FROM products
+                     WHERE franchise_id = v_products(i).fran_id;
+            END IF;
+            v_average := v_average + v_max_prod(v_products(i).fran_id) - v_products(i).price;
+        END LOOP;
+        
+        RETURN (v_average/v_products.COUNT);
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN DBMS_OUTPUT.PUT_LINE('PLATFORM ' || p_platform_name ||' NOT FOUND!');
+                                RAISE NO_DATA_FOUND;
+        WHEN VALUE_ERROR THEN DBMS_OUTPUT.PUT_LINE('THERE ARE NO PRODUCTS FOR PLATFORM ' || p_platform_name);
+                                RETURN 0;
+    END m_average_diff;
+    
+    PROCEDURE m_discount_all_independent(p_discount IN products.base_price%TYPE) IS
+        CURSOR products_by(studio_id studios.studio_id%TYPE) IS --parameter cursor
+            SELECT product_id
+            FROM products
+            WHERE developer_id = studio_id
+            FOR UPDATE OF base_price;
+        BAD_DISCOUNT EXCEPTION;
+    BEGIN
+        IF p_discount NOT BETWEEN 0 AND 1 THEN RAISE BAD_DISCOUNT;
+        END IF;
+        FOR studio IN (SELECT studio_id     -- subquery cursor
+                       FROM studios
+                       WHERE parent_id IS NULL) LOOP
+            FOR product IN products_by(studio.studio_id) LOOP
+                UPDATE products
+                SET base_price = base_price * (1 - p_discount)
+                WHERE CURRENT OF products_by;
+            END LOOP;
+        END LOOP;
+
+    EXCEPTION
+        WHEN BAD_DISCOUNT THEN DBMS_OUTPUT.PUT_LINE('INVALID DISCOUNT VALUE');
+    END m_discount_all_independent;
+
+    FUNCTION m_review_count(p_product IN products.product_title%TYPE,
+                                        p_threshold IN reviews.rating%TYPE,
+                                        p_date_since IN reviews.review_date%TYPE)
+                                        RETURN NUMBER IS
+        v_count NUMBER;
+        v_id products.product_id%TYPE;
+        v_release products.release_date%TYPE;
+        INVALID_THRESHOLD EXCEPTION;
+        INVALID_DATE EXCEPTION;
+    BEGIN
+        IF p_threshold NOT BETWEEN 0 AND 5 THEN RAISE INVALID_THRESHOLD;
+        END IF;
+        
+        SELECT product_id,release_date
+        INTO v_id,v_release
+        FROM products
+        WHERE lower(product_title) = lower(p_product);
+        
+        IF p_date_since NOT BETWEEN v_release AND sysdate THEN RAISE INVALID_DATE;
+        END IF;
+        
+        SELECT count(*)
+        INTO v_count                       --3 tables
+        FROM reviews
+        WHERE (account_id,product_id) IN (SELECT receiver_id, product_id
+                                          FROM product_purchases JOIN  purchases USING (client_id,purchase_date)
+                                          WHERE product_id = v_id)
+               AND rating >= p_threshold 
+               AND review_date >= p_date_since;
+        RETURN v_count;
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN DBMS_OUTPUT.PUT_LINE('PRODUCT '||p_product||' NOT FOUND!');
+                                RAISE NO_DATA_FOUND;
+        WHEN INVALID_THRESHOLD THEN DBMS_OUTPUT.PUT_LINE('INVALID THRESHOLD! SHOULD BE BETWEEN 0 and 5!');
+        WHEN INVALID_DATE THEN DBMS_OUTPUT.PUT_LINE('INVALID DATE! SHOULD BE BETWEEN PRODUCT DATE AND PRESENT');
+    END m_review_count;
+
+    PROCEDURE m_delete_uncommon_friends(p_user IN accounts.display_name%TYPE) IS
+        --procedure could be simplified by declaring this collection at schema level
+        --thus enabling me to use it in SQL expressions... I chose not to do that however
+        TYPE account_table IS TABLE OF accounts.account_id%TYPE;
+        v_user accounts.account_id%TYPE;
+        v_all_friends account_table := account_table();
+        v_common_friends account_table := account_table();
+        v_uncommon_friends account_table := account_table();
+    BEGIN
+        SELECT account_id
+        INTO v_user
+        FROM accounts
+        WHERE lower(display_name) = lower(p_user);
+        
+        WITH friends AS
+            (SELECT a.account_id
+            FROM friendships   f
+            JOIN accounts a ON (f.friend_id = a.account_id)
+            WHERE f.account_id = v_user
+            UNION
+            SELECT account_id 
+            FROM friendships
+            JOIN accounts USING (account_id)
+            WHERE friend_id = v_user)
+        SELECT account_id
+        BULK COLLECT INTO v_all_friends
+        FROM friends;
+        
+        WITH friends AS
+            (SELECT a.account_id
+            FROM friendships   f
+            JOIN accounts a ON (f.friend_id = a.account_id)
+            WHERE f.account_id = v_user
+            UNION
+            SELECT account_id 
+            FROM friendships
+            JOIN accounts USING (account_id)
+            WHERE friend_id = v_user)
+        SELECT DISTINCT a.account_id
+        BULK COLLECT INTO v_common_friends
+        FROM friends a JOIN purchases p ON (a.account_id = p.receiver_id)      --5 tables
+             JOIN product_purchases pp ON (pp.client_id = p.client_id
+                                      AND pp.purchase_date = p.purchase_date)
+             JOIN product_availability pa ON (pa.product_id = pp.product_id)
+        WHERE(pa.product_id,pa.platform_id) IN (SELECT pa.product_id, pa.platform_id
+                                                FROM purchases p
+                                                JOIN product_purchases pp ON (pp.client_id = p.client_id
+                                                                          AND pp.purchase_date = p.purchase_date)
+                                                JOIN product_availability pa ON (pa.product_id = pp.product_id)
+                                                WHERE receiver_id = v_user);
+         
+         v_uncommon_friends := v_all_friends MULTISET EXCEPT v_common_friends;
+         
+         FORALL i IN v_uncommon_friends.FIRST..v_uncommon_friends.LAST
+         DELETE FROM friendships
+         WHERE (account_id = v_user AND friend_id = v_uncommon_friends(i))
+            OR (friend_id = v_user AND account_id = v_uncommon_friends(i));         
+         
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN DBMS_OUTPUT.PUT_LINE('USER WITH DISPLAY NAME '|| p_user || ' NOT FOUND');
+                                RAISE NO_DATA_FOUND;
+        WHEN TOO_MANY_ROWS THEN DBMS_OUTPUT.PUT_LINE('MORE THAN ONE USER WITH DISPLAY NAME ' || p_user);
+                                RAISE TOO_MANY_ROWS;
+    END m_delete_uncommon_friends;    
+
+END misc;
 /
 
 --Ex.14
@@ -366,9 +605,19 @@ CREATE OR REPLACE PACKAGE BODY transactions AS
         v_spent deposits.deposit_sum%TYPE :=0;
         v_user_id accounts.account_id%TYPE;
     BEGIN
-    
-        SELECT account_id,sum(deposit_sum)
-        INTO v_user_id,v_balance
+        
+        BEGIN
+            SELECT account_id
+            INTO v_user_id
+            FROM accounts
+            WHERE lower(username) = lower(p_user);
+        EXCEPTION
+            WHEN NO_DATA_FOUND THEN DBMS_OUTPUT.PUT_LINE('USER ' || p_user || ' NOT FOUND!');
+                                    RAISE NO_DATA_FOUND;
+        END;
+        
+        SELECT sum(deposit_sum)
+        INTO v_balance
         FROM deposits JOIN accounts ON (client_id = account_id)
         WHERE lower(username) = lower(p_user)
         GROUP BY account_id;
@@ -380,8 +629,7 @@ CREATE OR REPLACE PACKAGE BODY transactions AS
         END LOOP;
         RETURN v_balance - v_spent;
     EXCEPTION
-        WHEN NO_DATA_FOUND THEN DBMS_OUTPUT.PUT_LINE('USER ' || p_user || ' NOT FOUND!');
-                                RAISE NO_DATA_FOUND;
+        WHEN NO_DATA_FOUND THEN RETURN 0;
     END getUserBalance;
     
     PROCEDURE addToCart(p_product IN products.product_title%TYPE, p_cart IN OUT product_list) IS
@@ -458,7 +706,6 @@ CREATE OR REPLACE PACKAGE BODY transactions AS
             INSERT INTO product_purchases
             VALUES (v_purchase.products(i).id,v_purchase.client_id,v_purchase.purchase_date);
         
-        COMMIT;
     EXCEPTION
         WHEN NO_DATA_FOUND THEN DBMS_OUTPUT.PUT_LINE('USER NOT FOUND!');
                                 RAISE NO_DATA_FOUND;
@@ -480,7 +727,6 @@ CREATE OR REPLACE PACKAGE BODY transactions AS
         INSERT INTO deposits
         VALUES (v_user_id, sysdate, p_sum);
         
-        COMMIT;
     EXCEPTION
         WHEN NO_DATA_FOUND THEN DBMS_OUTPUT.PUT_LINE('USER ' || p_user || ' NOT FOUND!');
                                 RAISE NO_DATA_FOUND;
@@ -489,3 +735,51 @@ CREATE OR REPLACE PACKAGE BODY transactions AS
     END makeDeposit;
 END transactions;
 /
+
+BEGIN
+    DBMS_OUTPUT.PUT_LINE(transactions.getPrice('Minecraft', sysdate));
+    --DBMS_OUTPUT.PUT_LINE(transactions.getPrice('Minecraft', TO_DATE('01-AUG-07', 'DD-MON-YY')));
+    --DBMS_OUTPUT.PUT_LINE(transactions.getPrice('Terraria', sysdate));
+END;
+/
+
+DECLARE
+    v_purch transactions.purchase;
+BEGIN
+    v_purch := transactions.getPurchase('widderr',TO_DATE('02-APR-21','DD-MON-YY'));
+    --v_purch := transactions.getPurchase('widderr',TO_DATE('07-APR-21','DD-MON-YY'));
+    DBMS_OUTPUT.PUT_LINE(transactions.getPurchaseTotal(v_purch));
+END;
+/
+
+BEGIN
+    DBMS_OUTPUT.PUT_LINE(transactions.getUserBalance('berkesmcheru'));
+    --DBMS_OUTPUT.PUT_LINE(transactions.getUserBalance('Nobody'));
+END;
+/
+
+BEGIN
+    transactions.makeDeposit('Qmpz',100);
+    --transactions.makeDeposit('zmpQ',50);
+    --transactions.makeDeposit('Qmpz',-1);
+END;
+/
+
+SELECT * FROM deposits;
+
+DECLARE
+    cart transactions.product_list := transactions.product_list();
+BEGIN
+    transactions.addToCart('Minecraft',cart);
+    transactions.addToCart('Team Fortress 2',cart);
+    --transactions.addToCart('Terraria', cart);
+    transactions.addToCart('Pokemon Sword and Shield',cart);
+    transactions.removeFromCart('Pokemon Sword and Shield',cart);
+    
+    --transactions.makeDeposit('Qmpz',100);
+    transactions.makePurchase('Qmpz',cart);
+    --transactions.makePurchase('freesciofficial',cart);
+END;
+/
+
+ROLLBACK;
